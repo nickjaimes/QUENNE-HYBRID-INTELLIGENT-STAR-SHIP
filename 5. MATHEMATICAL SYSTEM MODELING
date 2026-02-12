@@ -1,0 +1,217 @@
+Mathematical & System Modeling Section
+
+Q-HISS Scientific Publication Edition — v1.0
+
+This section defines a minimal but comprehensive modeling backbone for Q-HISS: (1) spacecraft dynamics, (2) perception & state estimation, (3) layered decision/control, (4) energy/thermal/resource management, (5) fault management, and (6) governance constraints with auditable authority.
+
+⸻
+
+1. System State, Inputs, and Observations
+
+Let the spacecraft be modeled as a partially observed dynamical system:
+   •   State: x_t \in \mathbb{R}^{n} (orbit/attitude, subsystem health, resources, thermal states)
+   •   Control: u_t \in \mathbb{R}^{m} (actuators, power routing, thermal valves, comm modes)
+   •   Disturbances: w_t (solar pressure, radiation events, component drift)
+   •   Observations: y_t \in \mathbb{R}^{p} (sensors, telemetry, star tracker, inertial, temps)
+
+Dynamics:
+x_{t+1} = f(x_t, u_t, w_t) + \epsilon_t
+Observation model:
+y_t = h(x_t) + \nu_t
+
+Where \epsilon_t, \nu_t capture process/measurement noise.
+
+⸻
+
+2. Spacecraft Dynamics: Orbit + Attitude (Baseline)
+
+2.1 Translational (orbit) dynamics (continuous-time)
+
+\dot{r} = v,\quad \dot{v} = a_g(r) + a_{pert}(t) + a_{prop}(u_t)
+   •   r, v \in \mathbb{R}^3
+   •   a_g(r): central gravity (or n-body in deep space)
+   •   a_{pert}: perturbations (SRP, third-body, drag in LEO, etc.)
+   •   a_{prop}: propulsion acceleration command
+
+2.2 Rotational (attitude) dynamics
+
+Represent attitude by quaternion q and body rates \omega:
+\dot{q} = \tfrac{1}{2}\Omega(\omega)q,\quad
+J\dot{\omega} = \tau(u_t) - \omega \times (J\omega) + \tau_{dist}
+   •   J: inertia matrix
+   •   \tau(u_t): reaction wheels / thrusters torque
+   •   \tau_{dist}: disturbance torques
+
+⸻
+
+3. State Estimation and Sensor Fusion
+
+Q-HISS uses a multi-rate estimator across navigation + health monitoring.
+
+3.1 Navigation filter (generic EKF / UKF form)
+
+\hat{x}_{t|t-1} = f(\hat{x}_{t-1|t-1}, u_{t-1}, 0)
+K_t = P_{t|t-1}H_t^\top(H_tP_{t|t-1}H_t^\top + R)^{-1}
+\hat{x}_{t|t} = \hat{x}_{t|t-1} + K_t\big(y_t - h(\hat{x}_{t|t-1})\big)
+   •   Supports star tracker + inertial + optical nav + celestial fixes
+
+3.2 Health-state estimation (latent health z_t)
+
+Introduce subsystem health latent variables z_t (battery SOH, reaction wheel friction, sensor bias):
+z_{t+1} = g(z_t, x_t) + \eta_t
+Estimated via Bayesian filtering / particle filters / HMMs depending on nonlinearity.
+
+⸻
+
+4. Layered Autonomy as a Hierarchical Control System
+
+Model Q-HISS as a two-timescale hierarchical controller:
+   •   Reflex layer (fast): stability + safety reactions (ms–s)
+   •   Cognitive layer (slow): planning + scheduling (minutes–hours)
+   •   Governance layer (authoritative): constraint enforcement + authorization
+
+4.1 Fast reflex controller
+
+A stabilizing feedback law:
+u_t^{ref} = \pi_{ref}( \hat{x}_t )
+Typical forms:
+   •   Attitude: LQR / MPC around reference q^\*
+   •   Thermal: PID / constrained MPC for heaters/valves
+   •   Power: safe-mode routing policy when anomalies detected
+
+4.2 Cognitive planning as constrained optimization
+
+Plan a sequence U = \{u_t\}_{t=0}^{T} minimizing mission cost:
+\min_{U} \ \mathbb{E}\left[\sum_{t=0}^{T} \ell(x_t,u_t) + \ell_T(x_T)\right]
+Subject to:
+x_{t+1}=f(x_t,u_t,w_t),\quad u_t \in \mathcal{U},\quad x_t \in \mathcal{X}
+This can be implemented as:
+   •   Model Predictive Control (MPC) for resource/thermal scheduling
+   •   Mixed-Integer optimization for mode switching and discrete decisions
+
+4.3 Decision-making under uncertainty (POMDP)
+
+For deep-space uncertainty:
+\mathcal{M} = (\mathcal{X},\mathcal{U},\mathcal{Y},T,O,R,\gamma)
+Belief update:
+b_{t+1}(x) \propto O(y_{t+1}|x)\int T(x|x',u_t)b_t(x')dx'
+Policy:
+u_t = \pi(b_t)
+Used for: science ops, comm windows, risk-aware route changes, contingency response.
+
+⸻
+
+5. Energy, Thermal, and Resource Modeling
+
+5.1 Power balance (discrete-time)
+
+Let E_t be stored energy (battery), P_{gen} generated, P_{load} consumed:
+E_{t+1} = E_t + \Delta t\left(\eta_c P_{gen,t} - \frac{1}{\eta_d}P_{load,t}\right)
+Constraints:
+E_{min}\le E_t \le E_{max},\quad
+0\le P_{gen,t}\le P_{gen,max},\quad
+0\le P_{load,t}\le P_{load,max}
+
+5.2 Thermal network model
+
+Let T_t \in \mathbb{R}^k be component temperatures:
+T_{t+1} = AT_t + B q_t + C T_{env,t}
+   •   q_t: heat inputs (electronics, heaters)
+   •   T_{env}: external boundary temps / radiative sink
+
+Safety bounds:
+T_{min}\le T_t \le T_{max}
+
+5.3 Joint energy–thermal scheduling (MPC)
+
+\min_{U}\sum_{t=0}^{T}\left(\alpha \|T_t-T^\*\|_2^2 + \beta P_{load,t} + \rho \,Risk(x_t)\right)
+Subject to the energy and thermal constraints above plus mission constraints.
+
+⸻
+
+6. Fault Detection, Isolation, and Recovery (FDIR)
+
+6.1 Residual-based detection
+
+Define residual:
+r_t = y_t - h(\hat{x}_{t|t-1})
+Trigger if:
+\|r_t\|_{\Sigma^{-1}}^2 > \tau
+
+6.2 Mode switching with hybrid automata
+
+Model system modes m \in \mathcal{M} (nominal, degraded, safe-mode, recovery):
+(x,m) \xrightarrow{\text{guard}(x,y)} (x',m')
+Recovery actions are policies conditioned on mode:
+u_t = \pi_{m}(b_t)
+
+6.3 Reliability objective (mission survivability)
+
+Maximize probability of mission success:
+\max_{\pi}\ \mathbb{P}_\pi(\text{Complete mission} \mid x_0)
+or minimize expected downtime / risk.
+
+⸻
+
+7. Governance, Authorization, and Auditability Constraints
+
+Q-HISS autonomy is bounded by policy + authority tokens.
+
+7.1 Governed action set
+
+Partition actions:
+   •   u \in \mathcal{U}_{free}: allowed without authorization (thermal balancing, routine scheduling)
+   •   u \in \mathcal{U}_{auth}: requires authorization (high-risk maneuvers, irreversible actions)
+
+Enforce:
+u_t \in \mathcal{U}_{free}\ \cup\ \left(\mathcal{U}_{auth}\cap \mathbb{I}[\text{AuthToken}_t=1]\right)
+
+7.2 Policy constraints as temporal logic (optional formalization)
+
+Let mission safety rules be expressed in LTL:
+\mathbf{G}(\text{TempSafe}) \wedge \mathbf{G}(\text{EnergySafe}) \wedge \mathbf{G}(\neg \text{UnsafeMode})
+Controller must satisfy:
+\pi \models \varphi
+
+7.3 Tamper-evident audit log
+
+Every decision emits an event:
+e_t = (t, \hat{x}_t, u_t, m_t, \text{policy\_id}, \text{auth\_hash})
+Append-only chain:
+H_t = \text{Hash}(H_{t-1}\ \| \ e_t)
+This supports traceability and post-mission verification.
+
+⸻
+
+8. Simulation & Validation Metrics
+
+Recommended evaluation metrics:
+
+Navigation
+   •   Drift: \|\hat{r}-r\| over mission segment
+   •   Attitude error: \angle(q, q^\*)
+
+Energy/Thermal
+   •   Constraint violations count
+   •   Mean power efficiency: delivered work per Joule
+   •   Thermal margin: \min(T_{max}-T)
+
+FDIR
+   •   Detection delay
+   •   False alarm rate
+   •   Recovery success rate
+
+Governance
+   •   Unauthorized action rate (target 0)
+   •   Audit completeness and replayability
+
+⸻
+
+9. Minimal “Reference Implementation” Model Stack
+
+To make this immediately implementable in your repo:
+	1.	Dynamics: orbit + attitude (ODE solver)
+	2.	Estimator: EKF for nav + residual monitor for health
+	3.	Planner: MPC for energy/thermal + discrete mode logic
+	4.	Governor: action gating + audit hashing
+	5.	Test harness: Monte Carlo disturbance campaigns
