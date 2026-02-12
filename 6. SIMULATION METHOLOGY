@@ -1,0 +1,273 @@
+Simulation Methodology
+
+Q-HISS Scientific Publication Edition — v1.0
+
+This section specifies a repeatable, audit-friendly simulation methodology to validate Q-HISS across navigation, autonomy, energy/thermal management, fault tolerance, and governance. It is designed to be implemented as an open research pipeline (Python + modular models) and to produce results acceptable for scientific review (clear assumptions, metrics, and statistical rigor).
+
+⸻
+
+1. Goals and Evaluation Questions
+
+Primary research questions (RQs)
+
+RQ1 — Autonomy under latency: Can Q-HISS maintain mission objectives under communication delays and limited ground intervention?
+RQ2 — Resilience: How robust is the system to faults, radiation events, and sensor degradation?
+RQ3 — Resource optimization: Does the energy/thermal scheduler keep the platform within safe bounds while maximizing task completion?
+RQ4 — Governed autonomy: Does the governance layer prevent unauthorized actions with zero safety-rule violations?
+RQ5 — Mission continuity: What is the probability of mission success under uncertainty (Monte Carlo)?
+
+⸻
+
+2. Simulation Approach Overview
+
+We use a multi-fidelity, hybrid simulation approach:
+
+2.1 Multi-physics + autonomy co-simulation
+   •   Flight dynamics: translational + rotational dynamics (continuous-time)
+   •   Navigation estimation: multi-rate EKF/UKF + health-state estimation
+   •   Autonomy & planning: hierarchical controller (reflex + cognitive planner + governance gate)
+   •   Resource networks: discrete-time energy + thermal network models
+   •   Fault/Radiation: event-driven fault injection + dose models
+   •   Comms: delay/loss models affecting command and telemetry
+
+2.2 Fidelity tiers (to retire risk progressively)
+
+Tier 0: functional mock models (fast iteration)
+Tier 1: physics-based orbit/attitude + simple thermal/power
+Tier 2: higher fidelity thermal network + realistic actuator/sensor noise
+Tier 3: hardware-in-the-loop proxies (optional later)
+
+⸻
+
+3. Simulation Architecture
+
+3.1 Digital twin state
+
+Define a combined simulation state:
+X_t = [x_t,\ z_t,\ E_t,\ T_t,\ m_t,\ b_t]
+Where:
+   •   x_t: spacecraft navigation state (orbit/attitude)
+   •   z_t: subsystem health (latent)
+   •   E_t: energy storage state
+   •   T_t: thermal state vector
+   •   m_t: discrete mode (nominal/degraded/safe/recovery)
+   •   b_t: belief state for POMDP policies (optional)
+
+3.2 Module interfaces (clear contracts)
+
+Each module must implement:
+   •   Step function: propagate forward one tick
+   •   Inputs/outputs: typed interface
+   •   Random seed control: reproducible stochasticity
+   •   Telemetry: logging all decisions and state variables
+
+⸻
+
+4. Scenarios and Mission Profiles
+
+Define canonical mission profiles for validation:
+
+Scenario S1 — Autonomous cargo logistics
+   •   Repeated maneuver windows
+   •   Periodic payload operations
+   •   Minimal ground support
+
+Scenario S2 — Crew support platform (cooperative autonomy)
+   •   Human-in-loop overrides
+   •   Safety constraints emphasized
+   •   Thermal/energy under crew load
+
+Scenario S3 — Deep-space exploration
+   •   Long comm delays
+   •   Environmental uncertainty (radiation storms)
+   •   High autonomy demand
+
+Scenario S4 — Infrastructure building / servicing
+   •   Frequent attitude reorientation
+   •   Continuous power draw
+   •   Fault-tolerant scheduling under high load
+
+Each scenario defines:
+   •   mission timeline
+   •   task list and priorities
+   •   constraints and acceptable deviations
+
+⸻
+
+5. Disturbance Models
+
+5.1 Environmental
+   •   Solar radiation pressure (SRP) perturbations
+   •   Thermal sink variation (sun/shadow cycles)
+   •   Radiation event intensity spikes
+   •   Dust/plume contamination (scenario-dependent)
+
+5.2 Sensor noise and drift
+   •   Bias + random walk for inertial sensors
+   •   Star tracker dropouts
+   •   Optical nav measurement noise
+   •   Temperature sensor offset drift
+
+5.3 Actuator imperfections
+   •   Reaction wheel saturation
+   •   Thruster misalignment
+   •   Power converter efficiency changes with temperature
+   •   Heater failures / stuck valves
+
+⸻
+
+6. Fault Injection Methodology
+
+Fault injection is performed as event-driven perturbations in time:
+
+6.1 Fault taxonomy
+
+F1: sensor faults (bias, dropout, degradation)
+F2: actuator faults (loss of authority, saturation, stuck-on/off)
+F3: compute faults (latency spikes, reset events, degraded performance)
+F4: power faults (battery SOH decline, array degradation)
+F5: thermal faults (radiator efficiency loss, heater failure)
+F6: comm faults (high delay, packet loss, blackout windows)
+
+6.2 Fault schedule generation
+
+For Monte Carlo run i, sample a fault set:
+\mathcal{F}^{(i)} = \{(t_k, type_k, severity_k, duration_k)\}_{k=1}^{K}
+Severities follow controlled distributions (mild/moderate/severe), e.g.:
+   •   sensor bias: \sim \mathcal{N}(0,\sigma_b^2)
+   •   dropout rate: Bernoulli with p
+   •   radiation event: Poisson arrivals with intensity distribution
+
+6.3 Recovery validation
+
+Measure detection delay and recovery success:
+   •   time-to-detect
+   •   time-to-recover
+   •   residual risk after recovery
+   •   mode transition correctness
+
+⸻
+
+7. Governance Layer Validation
+
+Governance is validated as a formal action gate:
+
+7.1 Action classes
+   •   \mathcal{U}_{free}: routine actions
+   •   \mathcal{U}_{auth}: high-risk or irreversible actions requiring authorization token
+
+7.2 Test cases
+   •   Attempt unauthorized high-risk maneuvers → must be blocked
+   •   Attempt risky mode changes under invalid policy state → must be blocked
+   •   Audit trail completeness → must be replayable
+
+7.3 Governance metrics
+   •   Unauthorized action attempts blocked (%)
+   •   Unauthorized action success count (target 0)
+   •   Safety constraint violations (target 0)
+   •   Audit log integrity (hash chain continuity)
+
+⸻
+
+8. Monte Carlo Campaign Design
+
+8.1 Experimental design
+
+Run a Monte Carlo suite:
+   •   N = 500–10{,}000 trials depending on complexity
+   •   Fixed scenario + randomized disturbances and faults
+   •   Controlled seeds for reproducibility
+
+8.2 Comparative baselines (ablation study)
+
+To demonstrate impact of stacked architecture, compare variants:
+
+B0: Classical control only (no planner)
+B1: Planner without neuromorphic reflex
+B2: Planner + reflex, without governance gate
+B3: Full Q-HISS (reflex + planner + governance + audit)
+
+This isolates where improvements come from.
+
+⸻
+
+9. Metrics and Success Criteria
+
+9.1 Mission success
+
+Define a mission success indicator:
+S = \mathbb{I}[\text{all critical objectives met and no safety violations}]
+Estimate probability:
+\hat{P}(S=1) = \frac{1}{N}\sum_{i=1}^{N} S_i
+
+9.2 Navigation
+   •   position error RMS
+   •   drift in GPS-denied mode
+   •   attitude pointing accuracy
+   •   estimator consistency (NEES/NIS if applicable)
+
+9.3 Energy & thermal
+   •   constraint violations count
+   •   mean thermal margin
+   •   battery SOC margin
+   •   energy cost per task completed
+
+9.4 Resilience
+   •   detection delay distribution
+   •   recovery time distribution
+   •   mission downtime
+   •   mode stability (avoid oscillation between modes)
+
+9.5 Governance & audit
+   •   blocked unauthorized actions
+   •   audit replay correctness
+   •   log hash continuity
+
+⸻
+
+10. Statistical Reporting
+
+For publication-grade reporting:
+   •   Report mean ± 95% confidence intervals
+   •   Provide distributions (CDFs) for key delays/errors
+   •   Use nonparametric tests for robustness comparisons when needed
+   •   Publish scenario definitions + seeds + configuration hashes
+
+Example CI for mission success:
+\text{CI}_{95\%} \approx \hat{p} \pm 1.96\sqrt{\frac{\hat{p}(1-\hat{p})}{N}}
+
+⸻
+
+11. Reproducibility and Open Research Packaging
+
+11.1 Artifact structure (recommended)
+   •   /sim/ scenario definitions + config YAML/JSON
+   •   /models/ dynamics, thermal, power, faults
+   •   /autonomy/ planner, reflex, governance
+   •   /metrics/ evaluation + plots
+   •   /runs/ stored run manifests (hashes, seeds, versions)
+
+11.2 Run manifest (per trial)
+
+Store:
+   •   seed
+   •   scenario id
+   •   fault list
+   •   code version hash
+   •   parameter hash
+   •   outputs + summary metrics
+
+This enables “paper-to-code” traceability.
+
+⸻
+
+12. Minimal Demonstration Experiment Set
+
+If you want a clean first publication result set:
+	1.	Nominal: no faults, moderate disturbances
+	2.	Comms-latency: 30–120 min delays + periodic blackouts
+	3.	Radiation storm: dose spike events + sensor resets
+	4.	Power degradation: battery SOH decline + solar array degradation
+	5.	Compound: combined faults + high uncertainty
+
+Run each with B0–B3 baselines.
